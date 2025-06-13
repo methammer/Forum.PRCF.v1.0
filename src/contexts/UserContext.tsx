@@ -33,21 +33,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [currentUserForEffect, setCurrentUserForEffect] = useState<User | null>(null);
   
-  const isInitialSetupRunning = useRef(true);
-  const effectInstanceCounter = useRef(0); 
+  const isInitialSetupRunning = useRef(true); 
+  const effectInstanceCounter = useRef(0);
   const definitiveInstanceRun = useRef(process.env.NODE_ENV === 'development' ? 2 : 1);
-
-  // Refs to hold the latest user and profile for onAuthStateChange callback
-  const userRef = useRef(user);
-  const profileRef = useRef(profile);
-
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
-
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     console.log(`[UserProvider] fetchProfile: Called for user ID: ${userId}`);
@@ -102,9 +90,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     let isActive = true;
     const currentEffectInstanceRun = ++effectInstanceCounter.current;
     
-    console.log(`[UserProvider] Main useEffect: Starting instance run ${currentEffectInstanceRun}. Definitive run is ${definitiveInstanceRun.current}. isInitialSetupRunning was ${isInitialSetupRunning.current}`);
+    console.log(`[UserProvider] useEffect: Starting instance run ${currentEffectInstanceRun}. Definitive run is ${definitiveInstanceRun.current}. isInitialSetupRunning was ${isInitialSetupRunning.current}`);
     
-    isInitialSetupRunning.current = true; 
     setIsLoadingAuth(true);
 
     const setupInitialAuth = async () => {
@@ -127,7 +114,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (isActive) {
           setSession(initialSession);
           const newAuthUser = initialSession?.user ?? null;
-          setUser(newAuthUser); // This will trigger userRef update
+          setUser(newAuthUser);
           if (currentUserForEffect?.id !== newAuthUser?.id || (!!currentUserForEffect !== !!newAuthUser)) {
              setCurrentUserForEffect(newAuthUser);
           }
@@ -136,7 +123,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (initialSession?.user) {
           console.log(`[UserProvider] setupInitialAuth (instance ${currentEffectInstanceRun}): Attempting profile fetch for user ${initialSession.user.id}.`);
           const fetchedProfile = await fetchProfile(initialSession.user.id);
-          if (isActive) setProfile(fetchedProfile); // This will trigger profileRef update
+          if (isActive) setProfile(fetchedProfile);
           console.log(`[UserProvider] setupInitialAuth (instance ${currentEffectInstanceRun}): Profile fetch from getSession for ${initialSession.user.id} ${fetchedProfile ? 'succeeded' : 'failed/timed out'}.`);
         } else {
           if (isActive) setProfile(null); 
@@ -147,11 +134,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       } finally {
         if (isActive) {
           setIsLoadingAuth(false); 
-          if (currentEffectInstanceRun === definitiveInstanceRun.current) {
+          if (isInitialSetupRunning.current && currentEffectInstanceRun >= definitiveInstanceRun.current) {
             console.log(`[UserProvider] setupInitialAuth (instance ${currentEffectInstanceRun}): Definitive run. Setting isInitialSetupRunning to false.`);
             isInitialSetupRunning.current = false;
-          } else {
-            console.log(`[UserProvider] setupInitialAuth (instance ${currentEffectInstanceRun}): Not definitive run. isInitialSetupRunning remains true.`);
           }
           console.log(`[UserProvider] setupInitialAuth (instance ${currentEffectInstanceRun}): Finally block. isLoadingAuth: false, isInitialSetupRunning: ${isInitialSetupRunning.current}`);
         }
@@ -168,12 +153,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
         console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}) event: ${_event}, New Session:`, newSession ? `User ID: ${newSession.user.id}` : 'null', `isInitialSetupRunning: ${isInitialSetupRunning.current}`);
         
-        const previousUser = userRef.current; // Use ref for previous user
+        const previousUser = user; 
 
         if (isActive) {
+          // Only set isLoadingAuth to true if it's not the initial setup phase handling it
+          if (!isInitialSetupRunning.current) {
+            setIsLoadingAuth(true);
+          }
           setSession(newSession);
           const newAuthUser = newSession?.user ?? null;
-          setUser(newAuthUser); // This will trigger userRef update
+          setUser(newAuthUser);
           if (currentUserForEffect?.id !== newAuthUser?.id || (!!currentUserForEffect !== !!newAuthUser)) {
             setCurrentUserForEffect(newAuthUser);
           }
@@ -188,8 +177,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
               shouldFetchProfile = true;
               console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event} during setup): USER_UPDATED. ShouldFetch: true.`);
             } else {
-              shouldFetchProfile = false;
-              console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event} during setup): Suppressing fetch. isInitialSetupRunning is true.`);
+              shouldFetchProfile = false; 
+              console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event} during setup): Suppressing listener fetch. isInitialSetupRunning is true.`);
             }
           } else {
             shouldFetchProfile = userChanged || _event === 'USER_UPDATED';
@@ -201,24 +190,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (shouldFetchProfile) {
-            if (isActive) setIsLoadingAuth(true);
             console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event}): Condition met, attempting profile fetch for user ${newSession.user.id}.`);
             const fetchedProfile = await fetchProfile(newSession.user.id);
             if (isActive) {
-              setProfile(fetchedProfile); // This will trigger profileRef update
-              setIsLoadingAuth(false);
-              console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event}): Profile fetch for ${newSession.user.id} ${fetchedProfile ? 'succeeded' : 'failed/timed out'}. setIsLoadingAuth(false).`);
+              setProfile(fetchedProfile);
+              // Only set isLoadingAuth to false if not in initial setup phase, 
+              // as setupInitialAuth's finally block will handle it.
+              if (!isInitialSetupRunning.current) {
+                setIsLoadingAuth(false);
+              }
+              console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event}): Profile fetch for ${newSession.user.id} ${fetchedProfile ? 'succeeded' : 'failed/timed out'}. setIsLoadingAuth(${!isInitialSetupRunning.current}).`);
             }
           } else {
-            console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event}): Condition NOT met for profile fetch. UserChanged: ${userChanged}, isInitialSetupRunning: ${isInitialSetupRunning.current}, CurrentProfileExists: ${!!profileRef.current}`); // Use profileRef
-            if (isActive && !isInitialSetupRunning.current && isLoadingAuth) {
+            console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, ${_event}): Condition NOT met for profile fetch. UserChanged: ${userChanged}, isInitialSetupRunning: ${isInitialSetupRunning.current}, CurrentProfileExists: ${!!profile}`);
+            // Only set isLoadingAuth to false if not in initial setup phase
+            if (isActive && !isInitialSetupRunning.current) {
               setIsLoadingAuth(false); 
             }
           }
-        } else { 
+        } else { // User signed out
           if (isActive) {
             setProfile(null); 
-            if (!isInitialSetupRunning.current) { 
+            // Only set isLoadingAuth to false if not in initial setup phase
+            if (!isInitialSetupRunning.current) {
               setIsLoadingAuth(false); 
             }
             console.log(`[UserProvider] onAuthStateChange (instance ${currentEffectInstanceRun}, SIGNED_OUT): User signed out. isLoadingAuth: ${isLoadingAuth}, isInitialSetupRunning: ${isInitialSetupRunning.current}`);
@@ -229,14 +223,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       isActive = false;
-      console.log(`[UserProvider] Main useEffect cleanup (instance ${currentEffectInstanceRun}): Unsubscribing auth listener.`);
+      console.log(`[UserProvider] useEffect cleanup (instance ${currentEffectInstanceRun}): Main setup effect unsubscribing auth listener.`);
       authListener?.subscription.unsubscribe();
-      // Reset counter for next full mount sequence if UserProvider itself unmounts/remounts
-      if (currentEffectInstanceRun === definitiveInstanceRun.current) {
-         effectInstanceCounter.current = 0;
-      }
     };
-  }, [fetchProfile, currentUserForEffect]); // Dependencies reverted
+  }, [fetchProfile, currentUserForEffect?.id]);
 
   const signOut = async () => {
     console.log('[UserProvider] signOut called.');
@@ -244,6 +234,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (error) {
       console.error('[UserProvider] Error signing out:', error);
     }
+    // State will be cleared by onAuthStateChange
   };
 
   const value = {
@@ -253,7 +244,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     isLoadingAuth,
     signOut,
   };
-  // console.log('[UserProvider] RENDERING with value:', value); // Optional: for deep debugging value
+
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };
 

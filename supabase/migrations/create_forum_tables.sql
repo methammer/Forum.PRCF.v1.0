@@ -1,4 +1,3 @@
-```sql
 /*
   # Create Forum Tables and RLS Policies
 
@@ -158,5 +157,3 @@ BEGIN
     VALUES ('Support Technique', 'Aide et support technique pour les outils du PRCF.', 'support-technique');
   END IF;
 END $$;
-
-    ```

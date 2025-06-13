@@ -1,16 +1,15 @@
 import { Outlet, useNavigate } from 'react-router-dom';
-// import { supabase } from '@/lib/supabaseClient'; // signOut is now in useUser
-import { useUser } from '@/contexts/UserContext'; // Import useUser
+import { useAuth } from '@/hooks/useAuth'; 
 import { Button } from '@/components/ui/button';
 import { LogOut, Home, Users, Settings, MessageSquare, LayoutGrid, ShieldCheck } from 'lucide-react';
 
 const MainLayout = () => {
   const navigate = useNavigate();
-  const { signOut, profile } = useUser(); // Get signOut and profile from context
+  const { signOut, canModerate, profile } = useAuth(); // Get signOut, canModerate and profile
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/connexion'); // Redirect after sign out
+    navigate('/connexion'); 
   };
 
   return (
@@ -43,26 +42,24 @@ const MainLayout = () => {
           <Button
             variant="ghost"
             className="w-full justify-start text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-            // onClick={() => navigate('/membres')} // Example route
-            disabled // Placeholder
-            title="Prochainement"
+            onClick={() => profile && navigate(`/profil/${profile.id}`)} // Navigate to own profile
+            disabled={!profile}
+            title={profile ? "Mon Profil" : "Chargement..."}
           >
-            <Users className="mr-3 h-5 w-5" />
-            Membres
+            <Users className="mr-3 h-5 w-5" /> 
+            Mon Profil 
           </Button>
           <Button
             variant="ghost"
             className="w-full justify-start text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-            // onClick={() => navigate('/parametres')} // Example route
-            disabled // Placeholder
-            title="Prochainement"
+            onClick={() => navigate('/parametre')} // Navigate to settings page
           >
             <Settings className="mr-3 h-5 w-5" />
             Paramètres
           </Button>
 
-          {/* Admin Panel Link - Conditionally Rendered */}
-          {profile?.role === 'admin' && (
+          {/* Admin Panel Link - Conditionally Rendered if user can moderate */}
+          {canModerate && (
             <>
               <hr className="my-2 border-gray-200 dark:border-gray-700" />
               <Button

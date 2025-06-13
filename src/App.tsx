@@ -3,12 +3,16 @@ import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import HomePage from './pages/HomePage';
 import ForumPage from './pages/ForumPage';
+import ProfilePage from './pages/ProfilePage';
+import SettingsPage from './pages/SettingsPage'; // Added
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/auth/AdminRoute';
 import MainLayout from './components/layout/MainLayout';
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
+import ModerationPage from './pages/admin/ModerationPage';
+import SectionManagementPage from './pages/admin/SectionManagementPage';
 import { Toaster } from "@/components/ui/toaster";
 
 function App() {
@@ -24,22 +28,23 @@ function App() {
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/forum" element={<ForumPage />} />
+            <Route path="/profil/:userId" element={<ProfilePage />} />
+            <Route path="/parametre" element={<SettingsPage />} /> {/* Added settings route */}
             {/* <Route path="/forum/categorie/:categorySlug" element={<CategoryPostsPage />} /> */}
             {/* <Route path="/forum/sujet/:postId" element={<PostDetailPage />} /> */}
-            {/* <Route path="/profil" element={<ProfilePage />} /> */}
           </Route>
         </Route>
 
-        {/* Protected routes for admin users */}
+        {/* Protected routes for admin/moderator users */}
         {/* First, ProtectedRoute ensures user is authenticated and profile (with status) is loaded */}
         <Route element={<ProtectedRoute />}> 
-          {/* Then, AdminRoute checks for profile.status === 'approved' and profile.role === 'admin' */}
+          {/* Then, AdminRoute checks for profile.status === 'approved' and profile.role is MODERATOR, ADMIN, or SUPER_ADMIN */}
           <Route path="/admin" element={<AdminRoute />}> 
             <Route element={<AdminLayout />}>
               <Route index element={<AdminDashboardPage />} />
-              <Route path="users" element={<UserManagementPage />} />
-              {/* Add other admin routes here, e.g., category management, post management */}
-              {/* Example: <Route path="categories" element={<CategoryManagementPage />} /> */}
+              <Route path="users" element={<UserManagementPage />} /> {/* Access control within component or specific route for ADMIN+ */}
+              <Route path="moderation" element={<ModerationPage />} /> {/* MODERATOR+ */}
+              <Route path="sections" element={<SectionManagementPage />} /> {/* Access control within component or specific route for ADMIN+ */}
             </Route>
           </Route>
         </Route>
