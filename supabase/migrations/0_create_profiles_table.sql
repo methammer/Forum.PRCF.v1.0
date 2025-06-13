@@ -1,9 +1,10 @@
 /*
-  # Create profiles table and RLS policies
+  # Create profiles table and RLS policies (Idempotent)
 
   This migration creates the `profiles` table to store user-specific data,
   linked to the `auth.users` table. It also enables Row Level Security (RLS)
-  and sets up initial policies.
+  and sets up initial policies. This version is idempotent and will drop
+  existing policies and triggers before recreating them.
 
   1. New Tables
      - `public.profiles`
@@ -24,14 +25,13 @@
         - Allows users to update their own profile. The `id` must match `auth.uid()`.
 
   3. Changes
-     - No existing tables modified.
+     - Policies and triggers will be dropped if they exist and then recreated.
 
   4. Important Notes
      - The `profiles` table is designed for a one-to-one relationship with `auth.users`.
-     - Future policies might be needed for more granular access control (e.g., allowing users to update only their own profiles).
 */
 
--- Create the profiles table
+-- Create the profiles table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username text UNIQUE,
@@ -41,24 +41,33 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at timestamptz DEFAULT now()
 );
 
--- Enable Row Level Security for the profiles table
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security for the profiles table if not already enabled
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'profiles' AND rowsecurity = 't'
+  ) THEN
+    ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+  END IF;
+END $$;
 
--- Policy: Allow authenticated users to read all profiles
+
+-- Drop existing policies if they exist, then create them
+DROP POLICY IF EXISTS "Allow authenticated users to read profiles" ON public.profiles;
 CREATE POLICY "Allow authenticated users to read profiles"
 ON public.profiles
 FOR SELECT
 TO authenticated
 USING (auth.role() = 'authenticated');
 
--- Policy: Allow users to insert their own profile
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
 CREATE POLICY "Users can insert their own profile"
 ON public.profiles
 FOR INSERT
 TO authenticated
 WITH CHECK (auth.uid() = id);
 
--- Policy: Allow users to update their own profile
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
 ON public.profiles
 FOR UPDATE
@@ -79,12 +88,14 @@ BEGIN
     NEW.raw_user_meta_data->>'username', -- Attempt to get username from metadata
     NEW.raw_user_meta_data->>'full_name', -- Attempt to get full_name from metadata
     NEW.raw_user_meta_data->>'avatar_url' -- Attempt to get avatar_url from metadata
-  );
+  )
+  ON CONFLICT (id) DO NOTHING; -- Avoid error if profile already exists for some reason
   RETURN NEW;
 END;
 $$;
 
 -- Trigger to call handle_new_user on new user creation
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
